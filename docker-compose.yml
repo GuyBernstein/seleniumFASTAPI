@@ -1,0 +1,15 @@
+services:
+  selenium-chrome:
+    image: seleniarm/standalone-chromium:latest
+    ports:
+      - "4444:4444"
+      - "7900:7900"
+    shm_size: '2g'
+    environment:
+      - SE_NODE_MAX_SESSIONS=4
+      - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+    healthcheck:
+      test: ["CMD", "/opt/bin/check-grid.sh"]
+      interval: 15s
+      timeout: 30s
+      retries: 5
