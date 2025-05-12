@@ -1,16 +1,16 @@
+import time
+from typing import Dict, Any
+
 from fastapi import APIRouter, HTTPException
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from pydantic import BaseModel
-from typing import Dict, Any
-import time
+from selenium.webdriver.support.ui import WebDriverWait
 
 router = APIRouter()
 
-# Selenium grid URL (same as in the Java version)
+# Selenium grid URL
 SELENIUM_GRID_URL = "http://localhost:4444/wd/hub"
 
 
@@ -36,7 +36,6 @@ def create_driver():
 def navigate_to_url(url: str) -> Dict[str, Any]:
     """
     Navigate to a URL and return the page title
-    Equivalent to the navigateToUrl method in SeleniumController.java
     """
     driver = None
     try:
@@ -61,35 +60,70 @@ def navigate_to_url(url: str) -> Dict[str, Any]:
 @router.post("/extract-text")
 def extract_text(url: str, css_selector: str) -> Dict[str, Any]:
     """
-    Extract text from an element using CSS selector
-    Equivalent to the extractText method in SeleniumController.java
+    Extract text from an element using CSS selector with validation
     """
     driver = None
+    start_time = time.time()
+
     try:
         driver = create_driver()
         driver.get(url)
-        element = driver.find_element(By.CSS_SELECTOR, css_selector)
-        text = element.text
 
-        return {
-            "status": "success",
-            "text": text
-        }
+        # Check if page loaded correctly
+        if "error" in driver.title.lower() or "404" in driver.title.lower():
+            return {
+                "status": "error",
+                "message": f"Page loaded with error title: {driver.title}",
+                "execution_time_ms": int((time.time() - start_time) * 1000)
+            }
+
+        # Use explicit wait instead of just finding the element
+        try:
+            element = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, css_selector))
+            )
+            text = element.text
+
+            # Validate that we got meaningful content
+            if not text or len(text.strip()) == 0:
+                return {
+                    "status": "warning",
+                    "message": "Element found but contains no text",
+                    "text": "",
+                    "execution_time_ms": int((time.time() - start_time) * 1000)
+                }
+
+            return {
+                "status": "success",
+                "text": text,
+                "execution_time_ms": int((time.time() - start_time) * 1000),
+                "page_title": driver.title,
+                "element_found": True
+            }
+
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Element not found: {str(e)}",
+                "execution_time_ms": int((time.time() - start_time) * 1000),
+                "page_title": driver.title,
+                "element_found": False
+            }
+
     except Exception as e:
         return {
             "status": "error",
-            "message": str(e)
+            "message": str(e),
+            "execution_time_ms": int((time.time() - start_time) * 1000)
         }
     finally:
         if driver:
             driver.quit()
 
-
 @router.post("/click")
 def click_element(url: str, css_selector: str) -> Dict[str, Any]:
     """
     Click an element using CSS selector
-    Equivalent to the clickElement method in SeleniumController.java
     """
     driver = None
     try:
